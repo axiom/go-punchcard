@@ -49,6 +49,12 @@ func MustParseHex(s string) colorful.Color {
 }
 
 var gradients = map[string]GradientTable{
+	"redgreen": {
+		{MustParseHex("#00ff00"), 0.0},
+		{MustParseHex("#cacaca"), 0.5},
+		{MustParseHex("#ff0000"), 1.0},
+	},
+
 	"fire": {
 		{MustParseHex("#ffffcc"), 0.0},
 		{MustParseHex("#ffeda0"), 0.111111},
@@ -177,6 +183,59 @@ func (b buckets) Max() float64 {
 	return max
 }
 
+// WeekdayMargin returns normalized weekday margin values.
+func (b buckets) WeekdayMargin() map[time.Weekday]float64 {
+	margins := make(map[time.Weekday]float64)
+	max := 0.0
+
+	for bucket, value := range b {
+		v := float64(value)
+		margins[bucket.day] += v
+
+		if v > max {
+			max = v
+		}
+	}
+
+	for key := range margins {
+		margins[key] /= max
+	}
+
+	return margins
+}
+
+// HourMargin returns normalized hourly margin values.
+func (b buckets) HourMargin() map[int]float64 {
+	margins := make(map[int]float64)
+	max := 0.0
+
+	for bucket, value := range b {
+		v := float64(value)
+		margins[bucket.hour] += v
+
+		if v > max {
+			max = v
+		}
+	}
+
+	for key := range margins {
+		margins[key] /= max
+	}
+
+	return margins
+}
+
+func (b buckets) Normalized() map[when]float64 {
+	normalizer := b.Max()
+	m := make(map[when]float64)
+
+	for when, value := range b {
+		m[when] = float64(value) / normalizer
+	}
+
+	return m
+}
+
 func (b buckets) Print() {
 	pal := colproximate.XTerm256[16:len(colproximate.XTerm256)]
 
@@ -192,13 +251,21 @@ func (b buckets) Print() {
 		os.Exit(1)
 	}
 
+	values := b.Normalized()
+	var weekdayMargins map[time.Weekday]float64
+	var hourMargins map[int]float64
+
+	if *margins {
+		weekdayMargins = b.WeekdayMargin()
+		hourMargins = b.HourMargin()
+	}
+
 	for _, day := range []time.Weekday{time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday, time.Saturday, time.Sunday} {
 		fmt.Printf("%9v ", day)
 
 		for hour := 0; hour < 24; hour++ {
-			v := b[when{day: day, hour: hour}]
-			f := float64(v) / b.Max()
-			c := keypoints.GetInterpolatedColorFor(f)
+			v := values[when{day: day, hour: hour}]
+			c := keypoints.GetInterpolatedColorFor(v)
 			i := 16 + pal.Index(c)
 
 			if v == 0 && *transparent {
@@ -207,18 +274,43 @@ func (b buckets) Print() {
 				fmt.Printf("\x1b[48;5;%vm  \x1b[0m", i)
 			}
 		}
+
+		if *margins {
+			// Print the day margin
+			{
+				v := weekdayMargins[day]
+				c := keypoints.GetInterpolatedColorFor(v)
+				i := 16 + pal.Index(c)
+				fmt.Printf("  \x1b[48;5;%vm  \x1b[0m", i)
+			}
+		}
+
+		fmt.Println()
+	}
+
+	if *margins {
+		// Print hourly margin
+		fmt.Println()
+		fmt.Printf("%9v ", "")
+		for hour := 0; hour < 24; hour++ {
+			v := hourMargins[hour]
+			c := keypoints.GetInterpolatedColorFor(v)
+			i := 16 + pal.Index(c)
+			fmt.Printf("\x1b[48;5;%vm  \x1b[0m", i)
+		}
 		fmt.Println()
 	}
 
 	if *scale {
 		fmt.Println()
-		fmt.Printf("%9v", "")
+		fmt.Printf("%9v ", "")
 		for i := 0; i < 48; i++ {
 			f := float64(i) / float64(48)
 			c := keypoints.GetInterpolatedColorFor(f)
 			i := 16 + pal.Index(c)
 			fmt.Printf("\x1b[48;5;%vm \x1b[0m", i)
 		}
+		fmt.Println()
 	}
 }
 
@@ -226,6 +318,8 @@ var (
 	palette     = flag.String("palette", "", "")
 	scale       = flag.Bool("scale", false, "Show color scale")
 	transparent = flag.Bool("transparent", false, "Missing data is not colored")
+	margins     = flag.Bool("margins", false, "Show day and hour margins")
+	layout      = flag.String("layout", "2006-01-02 15:04:05 -0700", "Date layout to parse dates with")
 )
 
 func main() {
@@ -234,6 +328,7 @@ func main() {
 	r := bufio.NewReader(os.Stdin)
 	buckets := make(buckets)
 
+outer:
 	for {
 		line, err := r.ReadString('\n')
 		if err != nil && err != io.EOF {
@@ -244,14 +339,35 @@ func main() {
 		}
 
 		line = strings.TrimSpace(line)
+		words := strings.Split(line, "\t")
 
-		t, err := time.Parse("2006-01-02 15:04:05 -0700", line)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
+		if len(words) == 0 {
 			continue
 		}
 
-		buckets[when{day: t.Weekday(), hour: t.Hour()}] += 1
+		times := make([]time.Time, len(words))
+
+		for i, word := range words {
+			t, err := time.Parse(*layout, word)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, err.Error())
+				continue outer
+			}
+			times[i] = t
+		}
+
+		if len(times) == 1 {
+			t := times[0]
+			buckets[when{day: t.Weekday(), hour: t.Hour()}] += 1
+		} else {
+			start := times[0]
+			stop := times[1]
+
+			// TODO: Don't assume same day.
+			for h := start.Hour(); h <= stop.Hour(); h++ {
+				buckets[when{day: start.Weekday(), hour: h}] += 1
+			}
+		}
 	}
 
 	buckets.Print()
