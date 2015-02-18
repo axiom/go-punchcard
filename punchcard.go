@@ -363,9 +363,10 @@ outer:
 			start := times[0]
 			stop := times[1]
 
-			// TODO: Don't assume same day.
-			for h := start.Hour(); h <= stop.Hour(); h++ {
-				buckets[when{day: start.Weekday(), hour: h}] += 1
+			t := start
+			for t.Before(stop) {
+				buckets[when{day: t.Weekday(), hour: t.Hour()}] += 1
+				t = t.Add(1 * time.Hour)
 			}
 		}
 	}
