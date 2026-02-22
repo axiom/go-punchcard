@@ -1,0 +1,6 @@
+antiklimax.se/go-colproximate v0.0.0-20150108084439-e51321fadb9e h1:z3Yj1RY2LbMIGHGzLwKeAn7IFBRy0wfF0krxkGwkOV4=
+antiklimax.se/go-colproximate v0.0.0-20150108084439-e51321fadb9e/go.mod h1:hOMK61NKayae/L0LBNcAudHe0gnX8Y5+cj57s7h5czk=
+github.com/axiom/rgbtxt v0.0.0-20150415090244-0743e59d3e6b h1:jyJ7Fek+JLCCIwG5RDUvZcgTjXBVDkCzL1dSlKpDloI=
+github.com/axiom/rgbtxt v0.0.0-20150415090244-0743e59d3e6b/go.mod h1:eY0fRG5Vej/bhyMlvl6EI4h4I3fbr6N5lre+5pel9Aw=
+github.com/lucasb-eyer/go-colorful v1.3.0 h1:2/yBRLdWBZKrf7gB40FoiKfAWYQ0lqNcbuQwVHXptag=
+github.com/lucasb-eyer/go-colorful v1.3.0/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
